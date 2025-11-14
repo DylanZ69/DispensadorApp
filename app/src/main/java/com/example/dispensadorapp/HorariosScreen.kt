@@ -1,0 +1,113 @@
+package com.example.dispensadorapp
+
+import android.app.TimePickerDialog
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
+import androidx.navigation.NavController
+import java.util.*
+
+@Composable
+fun HorariosScreen(navController: NavController, vm: AppViewModel) {
+
+    var horaSeleccionada by remember { mutableStateOf("") }
+    var mensaje by remember { mutableStateOf<String?>(null) }
+
+    val calendar = Calendar.getInstance()
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(24.dp)
+    ) {
+
+        Text(
+            "Registrar Horarios",
+            style = MaterialTheme.typography.headlineSmall
+        )
+
+        Spacer(modifier = Modifier.height(20.dp))
+
+        Button(
+            modifier = Modifier.fillMaxWidth(),
+            onClick = {
+
+                val hora = calendar.get(Calendar.HOUR_OF_DAY)
+                val minuto = calendar.get(Calendar.MINUTE)
+
+                TimePickerDialog(
+                    navController.context,
+                    { _, newHour, newMinute ->
+
+                        // Convertimos a AM/PM
+                        val amPm = if (newHour >= 12) "PM" else "AM"
+                        val hour12 = if (newHour == 0) 12 else if (newHour > 12) newHour - 12 else newHour
+
+                        horaSeleccionada = String.format("%02d:%02d %s", hour12, newMinute, amPm)
+                    },
+                    hora,
+                    minuto,
+                    false // ← 12 horas
+                ).show()
+            }
+        ) {
+            Text(if (horaSeleccionada.isEmpty()) "Seleccionar hora" else horaSeleccionada)
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Button(
+            onClick = {
+                if (horaSeleccionada.isNotBlank()) {
+
+                    vm.agregarHorario(horaSeleccionada) { ok ->
+                        mensaje = if (ok) {
+                            horaSeleccionada = ""
+                            "Horario guardado correctamente"
+                        } else {
+                            "Error al guardar"
+                        }
+                    }
+
+                }
+            },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("Guardar horario")
+        }
+
+        mensaje?.let {
+            Spacer(modifier = Modifier.height(12.dp))
+            Text(it, color = MaterialTheme.colorScheme.primary)
+        }
+
+        Spacer(modifier = Modifier.height(26.dp))
+
+
+        Text("Horarios guardados:", style = MaterialTheme.typography.titleMedium)
+        Spacer(modifier = Modifier.height(10.dp))
+
+        LazyColumn {
+            items(vm.horarios) { item ->
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 10.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(item.hora)
+
+                    Switch(
+                        checked = item.activo,
+                        onCheckedChange = { vm.cambiarEstadoHorario(item.id, it) }
+                    )
+                }
+            }
+        }
+    }
+}
