@@ -9,37 +9,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
-import com.google.firebase.firestore.FirebaseFirestore
-import java.text.SimpleDateFormat
-import java.util.*
 
 @Composable
-fun MonitoreoScreen(navController: NavController) {
+fun MonitoreoScreen(navController: NavController, vm: AppViewModel) {
 
-    val db = FirebaseFirestore.getInstance()
-
-    var gramos by remember { mutableStateOf("") }
-    var ultimo by remember { mutableStateOf("N/A") }
+    var gramosInput by remember { mutableStateOf("") }
     var mensaje by remember { mutableStateOf("") }
-
-    // Cargar última dispensación en tiempo real
-    LaunchedEffect(true) {
-        db.collection("dispensaciones")
-            .orderBy("timestamp", com.google.firebase.firestore.Query.Direction.DESCENDING)
-            .limit(1)
-            .addSnapshotListener { snap, _ ->
-                if (snap != null && !snap.isEmpty) {
-                    val doc = snap.documents.first()
-                    val g = doc.getLong("gramos")
-                    val t = doc.getLong("timestamp")
-
-                    if (g != null && t != null) {
-                        val hora = SimpleDateFormat("hh:mm a", Locale.getDefault()).format(Date(t))
-                        ultimo = "$g g   |   $hora"
-                    }
-                }
-            }
-    }
 
     Column(
         modifier = Modifier
@@ -49,55 +24,67 @@ fun MonitoreoScreen(navController: NavController) {
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
 
-        Text("Dispensar Gramos", style = MaterialTheme.typography.headlineMedium)
+        Text(
+            text = "Dispensar Gramos",
+            style = MaterialTheme.typography.headlineMedium
+        )
+
         Spacer(Modifier.height(20.dp))
 
         OutlinedTextField(
-            value = gramos,
-            onValueChange = { gramos = it },
+            value = gramosInput,
+            onValueChange = { gramosInput = it },
             label = { Text("Cantidad en gramos") },
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            enabled = !vm.automatico
         )
 
         Spacer(Modifier.height(16.dp))
 
         Button(
+            modifier = Modifier.fillMaxWidth(),
+            enabled = !vm.automatico,
             onClick = {
-                if (gramos.isNotBlank()) {
-                    val cantidad = gramos.toIntOrNull()
-
-                    if (cantidad != null) {
-                        val data = mapOf(
-                            "gramos" to cantidad,
-                            "timestamp" to System.currentTimeMillis()
-                        )
-
-                        db.collection("dispensaciones")
-                            .add(data)
-                            .addOnSuccessListener {
-                                mensaje = "Dispensación guardada"
-                                gramos = ""
-                            }
-                            .addOnFailureListener {
-                                mensaje = "Error al guardar"
-                            }
-                    } else {
-                        mensaje = "Ingresa un número válido"
-                    }
+                val cantidad = gramosInput.toIntOrNull()
+                if (cantidad != null && cantidad > 0) {
+                    vm.dispensarManual(cantidad)
+                    mensaje = "Dispensando..."
+                    gramosInput = ""
+                } else {
+                    mensaje = "Ingresa un número válido"
                 }
-            },
-            modifier = Modifier.fillMaxWidth()
+            }
         ) {
             Text("Dispensar")
         }
 
-        Spacer(Modifier.height(20.dp))
-        Text("Última dispensación:", style = MaterialTheme.typography.titleMedium)
-        Text(ultimo, style = MaterialTheme.typography.titleLarge)
+        if (vm.automatico) {
+            Spacer(Modifier.height(12.dp))
+            Text(
+                text = "Cambia a modo Manual para dispensar",
+                color = MaterialTheme.colorScheme.error
+            )
+        }
+
+        Spacer(Modifier.height(24.dp))
+
+        Text(
+            text = "Última dispensación",
+            style = MaterialTheme.typography.titleMedium
+        )
+
+        Text(
+            text = vm.ultimaDispensacion,
+            style = MaterialTheme.typography.titleLarge
+        )
 
         if (mensaje.isNotEmpty()) {
             Spacer(Modifier.height(20.dp))
-            Text(mensaje, color = Color.DarkGray)
+            Text(
+                text = mensaje,
+                color = Color.DarkGray
+            )
         }
     }
 }

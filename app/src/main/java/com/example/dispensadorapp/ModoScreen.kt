@@ -25,7 +25,9 @@ fun ModoScreen(navController: NavController, vm: AppViewModel) {
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically
+        ) {
 
             Switch(
                 checked = vm.automatico,
@@ -36,7 +38,21 @@ fun ModoScreen(navController: NavController, vm: AppViewModel) {
 
             Spacer(modifier = Modifier.width(12.dp))
 
-            Text(if (vm.automatico) "Automático" else "Manual")
+            Text(
+                text = if (vm.automatico) "Automático" else "Manual",
+                style = MaterialTheme.typography.bodyLarge
+            )
         }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        Text(
+            text = if (vm.automatico)
+                "El dispensador funcionará según los horarios configurados."
+            else
+                "El dispensador solo funcionará cuando presiones el botón manual.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }

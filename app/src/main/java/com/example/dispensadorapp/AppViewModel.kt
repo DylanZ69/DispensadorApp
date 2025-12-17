@@ -1,24 +1,24 @@
 package com.example.dispensadorapp
 
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.*
 import androidx.lifecycle.ViewModel
+import com.google.firebase.database.*
 import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.firestore.Query
 
 data class HorarioItem(
     val id: String = "",
     val hora: String = "",
-    val activo: Boolean = true,
-    val timestamp: Long = 0L
+    val activo: Boolean = true
 )
 
 class AppViewModel : ViewModel() {
 
-    private val db = FirebaseFirestore.getInstance()
+    /* ===================== FIREBASE ===================== */
+    private val rtdb = FirebaseDatabase.getInstance().reference
+    private val firestore = FirebaseFirestore.getInstance()
 
-    var automatico by mutableStateOf(true)
+    /* ===================== STATE ===================== */
+    var automatico by mutableStateOf(false)
         private set
 
     var horarios by mutableStateOf<List<HorarioItem>>(emptyList())
@@ -27,38 +27,92 @@ class AppViewModel : ViewModel() {
     var ultimaDispensacion by mutableStateOf("--")
         private set
 
+    var gramosConfigurados by mutableStateOf(0)
+        private set
+
+    private var ultimaHoraGuardada: String? = null
+
+    /* ===================== INIT ===================== */
     init {
-        loadModo()
-        loadHorarios()
-        loadMonitoreo()
+        inicializarFirebase()
+        escucharModo()
+        escucharHorarios()
+        escucharGramos()
+        escucharMonitoreo()   // 🔥 ESTE ES EL CLAVE PARA EL HISTORIAL
     }
 
-    private fun loadModo() {
-        db.collection("config").document("modo")
-            .addSnapshotListener { snap, _ ->
-                automatico = snap?.getBoolean("automatico") ?: true
+    /* ===================== INIT SEGURO ===================== */
+    private fun inicializarFirebase() {
+
+        rtdb.child("config").child("modoAutomatico")
+            .get().addOnSuccessListener {
+                if (!it.exists()) {
+                    rtdb.child("config").child("modoAutomatico").setValue(false)
+                }
             }
+
+        rtdb.child("dispensacion").child("gramos")
+            .get().addOnSuccessListener {
+                if (!it.exists()) {
+                    rtdb.child("dispensacion").child("gramos").setValue(20)
+                }
+            }
+
+        rtdb.child("dispensacion").child("activar")
+            .get().addOnSuccessListener {
+                if (!it.exists()) {
+                    rtdb.child("dispensacion").child("activar").setValue(false)
+                }
+            }
+
+        rtdb.child("monitoreo").child("ultimaDispensacion")
+            .get().addOnSuccessListener {
+                if (!it.exists()) {
+                    rtdb.child("monitoreo")
+                        .child("ultimaDispensacion")
+                        .setValue("--")
+                }
+            }
+    }
+
+    /* ===================== MODO ===================== */
+    private fun escucharModo() {
+        rtdb.child("config").child("modoAutomatico")
+            .addValueEventListener(object : ValueEventListener {
+                override fun onDataChange(snapshot: DataSnapshot) {
+                    automatico = snapshot.getValue(Boolean::class.java) ?: false
+                }
+                override fun onCancelled(error: DatabaseError) {}
+            })
     }
 
     fun cambiarModo(value: Boolean) {
-        automatico = value
-        db.collection("config").document("modo")
-            .set(mapOf("automatico" to value))
+        rtdb.child("config").child("modoAutomatico").setValue(value)
     }
 
-    private fun loadHorarios() {
-        db.collection("horarios")
-            .orderBy("timestamp", Query.Direction.DESCENDING)
-            .addSnapshotListener { snap, _ ->
-                horarios = snap?.documents?.map { doc ->
-                    HorarioItem(
-                        id = doc.id,
-                        hora = doc.getString("hora") ?: "",
-                        activo = doc.getBoolean("activo") ?: true,
-                        timestamp = doc.getLong("timestamp") ?: 0L
-                    )
-                } ?: emptyList()
-            }
+    /* ===================== HORARIOS ===================== */
+    private fun escucharHorarios() {
+        rtdb.child("horarios")
+            .addValueEventListener(object : ValueEventListener {
+                override fun onDataChange(snapshot: DataSnapshot) {
+                    val lista = snapshot.children.mapNotNull { child ->
+                        val hora = child.child("hora").getValue(String::class.java)
+                        val activo = child.child("activo")
+                            .getValue(Boolean::class.java) ?: true
+
+                        if (hora != null) {
+                            HorarioItem(
+                                id = child.key ?: "",
+                                hora = hora,
+                                activo = activo
+                            )
+                        } else null
+                    }
+                    horarios = lista
+                }
+
+                override fun onCancelled(error: DatabaseError) {}
+            })
     }
 
     fun agregarHorario(hora: String, callback: (Boolean) -> Unit) {
@@ -67,33 +121,78 @@ class AppViewModel : ViewModel() {
             return
         }
 
+        val key = hora.replace(":", "_").replace(" ", "_")
+
         val data = mapOf(
             "hora" to hora,
-            "activo" to true,
-            "timestamp" to System.currentTimeMillis()
+            "activo" to true
         )
 
-        db.collection("horarios")
-            .add(data)
+        rtdb.child("horarios")
+            .child(key)
+            .setValue(data)
             .addOnSuccessListener { callback(true) }
             .addOnFailureListener { callback(false) }
     }
 
     fun cambiarEstadoHorario(id: String, activo: Boolean) {
-        db.collection("horarios").document(id)
-            .update("activo", activo)
+        rtdb.child("horarios")
+            .child(id)
+            .child("activo")
+            .setValue(activo)
     }
 
-
-    private fun loadMonitoreo() {
-        db.collection("monitoreo").document("ultima")
-            .addSnapshotListener { snap, _ ->
-                ultimaDispensacion = snap?.getString("hora") ?: "--"
-            }
+    /* ===================== MANUAL ===================== */
+    fun dispensarManual(gramos: Int) {
+        rtdb.child("dispensacion").child("gramos").setValue(gramos)
+        rtdb.child("dispensacion").child("activar").setValue(true)
     }
 
-    fun actualizarDispensacion(hora: String) {
-        db.collection("monitoreo").document("ultima")
-            .set(mapOf("hora" to hora))
+    /* ===================== GRAMOS ===================== */
+    private fun escucharGramos() {
+        rtdb.child("dispensacion").child("gramos")
+            .addValueEventListener(object : ValueEventListener {
+                override fun onDataChange(snapshot: DataSnapshot) {
+                    gramosConfigurados =
+                        snapshot.getValue(Int::class.java) ?: 0
+                }
+                override fun onCancelled(error: DatabaseError) {}
+            })
+    }
+
+    /* ===================== MONITOREO + HISTORIAL ===================== */
+    private fun escucharMonitoreo() {
+        rtdb.child("monitoreo")
+            .addValueEventListener(object : ValueEventListener {
+                override fun onDataChange(snapshot: DataSnapshot) {
+
+                    val hora = snapshot.child("ultimaDispensacion")
+                        .getValue(String::class.java) ?: return
+
+                    if (hora == ultimaHoraGuardada) return
+                    ultimaHoraGuardada = hora
+
+                    ultimaDispensacion = hora
+
+                    val gramos = snapshot.child("gramos")
+                        .getValue(Int::class.java) ?: 0
+
+                    val tipo = snapshot.child("tipo")
+                        .getValue(String::class.java) ?: "manual"
+
+                    // 🔵 HISTORIAL OFICIAL (Firestore)
+                    firestore.collection("dispensaciones")
+                        .add(
+                            mapOf(
+                                "hora" to hora,
+                                "gramos" to gramos,
+                                "tipo" to tipo,
+                                "timestamp" to System.currentTimeMillis()
+                            )
+                        )
+                }
+
+                override fun onCancelled(error: DatabaseError) {}
+            })
     }
 }

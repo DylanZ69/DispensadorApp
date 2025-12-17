@@ -52,7 +52,7 @@ fun AppNavigation() {
                 HomeScreen(navController)
             }
             composable("monitoreo") {
-                MonitoreoScreen(navController)
+                MonitoreoScreen(navController, vm)
             }
             composable("modo") {
                 ModoScreen(navController, vm)

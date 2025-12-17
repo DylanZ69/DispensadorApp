@@ -21,12 +21,17 @@ fun HistorialScreen(navController: NavController) {
         db.collection("dispensaciones")
             .orderBy("timestamp", Query.Direction.DESCENDING)
             .addSnapshotListener { snapshot, _ ->
+
                 if (snapshot != null) {
                     historial = snapshot.documents.mapNotNull { doc ->
                         val gramos = doc.getLong("gramos")
                         val timestamp = doc.getLong("timestamp")
+
                         if (gramos != null && timestamp != null) {
-                            DispItem(gramos.toInt(), timestamp)
+                            DispItem(
+                                gramos = gramos.toInt(),
+                                timestamp = timestamp
+                            )
                         } else null
                     }
                 }
@@ -39,17 +44,24 @@ fun HistorialScreen(navController: NavController) {
             .padding(24.dp)
     ) {
 
-        Text("Historial de Dispensas", style = MaterialTheme.typography.headlineSmall)
+        Text(
+            text = "Historial de Dispensas",
+            style = MaterialTheme.typography.headlineSmall
+        )
+
         Spacer(modifier = Modifier.height(24.dp))
 
         if (historial.isEmpty()) {
             Text("No hay dispensaciones registradas.")
         } else {
             historial.forEach { item ->
-                val hora = SimpleDateFormat("hh:mm a", Locale.getDefault())
-                    .format(Date(item.timestamp))
 
-                Text("- ${item.gramos} g   |   $hora")
+                val hora = SimpleDateFormat(
+                    "hh:mm a",
+                    Locale.getDefault()
+                ).format(Date(item.timestamp))
+
+                Text("• ${item.gramos} g   |   $hora")
                 Spacer(modifier = Modifier.height(8.dp))
             }
         }

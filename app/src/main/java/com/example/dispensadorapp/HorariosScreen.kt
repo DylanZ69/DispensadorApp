@@ -26,7 +26,7 @@ fun HorariosScreen(navController: NavController, vm: AppViewModel) {
     ) {
 
         Text(
-            "Registrar Horarios",
+            text = "Registrar Horarios",
             style = MaterialTheme.typography.headlineSmall
         )
 
@@ -35,7 +35,6 @@ fun HorariosScreen(navController: NavController, vm: AppViewModel) {
         Button(
             modifier = Modifier.fillMaxWidth(),
             onClick = {
-
                 val hora = calendar.get(Calendar.HOUR_OF_DAY)
                 val minuto = calendar.get(Calendar.MINUTE)
 
@@ -43,39 +42,45 @@ fun HorariosScreen(navController: NavController, vm: AppViewModel) {
                     navController.context,
                     { _, newHour, newMinute ->
 
-                        // Convertimos a AM/PM
                         val amPm = if (newHour >= 12) "PM" else "AM"
-                        val hour12 = if (newHour == 0) 12 else if (newHour > 12) newHour - 12 else newHour
+                        val hour12 =
+                            if (newHour == 0) 12
+                            else if (newHour > 12) newHour - 12
+                            else newHour
 
-                        horaSeleccionada = String.format("%02d:%02d %s", hour12, newMinute, amPm)
+                        horaSeleccionada =
+                            String.format("%02d:%02d %s", hour12, newMinute, amPm)
                     },
                     hora,
                     minuto,
-                    false // ← 12 horas
+                    false
                 ).show()
             }
         ) {
-            Text(if (horaSeleccionada.isEmpty()) "Seleccionar hora" else horaSeleccionada)
+            Text(
+                if (horaSeleccionada.isEmpty())
+                    "Seleccionar hora"
+                else
+                    horaSeleccionada
+            )
         }
 
         Spacer(modifier = Modifier.height(16.dp))
 
         Button(
+            modifier = Modifier.fillMaxWidth(),
             onClick = {
                 if (horaSeleccionada.isNotBlank()) {
-
                     vm.agregarHorario(horaSeleccionada) { ok ->
                         mensaje = if (ok) {
                             horaSeleccionada = ""
                             "Horario guardado correctamente"
                         } else {
-                            "Error al guardar"
+                            "Error al guardar el horario"
                         }
                     }
-
                 }
-            },
-            modifier = Modifier.fillMaxWidth()
+            }
         ) {
             Text("Guardar horario")
         }
@@ -87,13 +92,15 @@ fun HorariosScreen(navController: NavController, vm: AppViewModel) {
 
         Spacer(modifier = Modifier.height(26.dp))
 
+        Text(
+            text = "Horarios configurados",
+            style = MaterialTheme.typography.titleMedium
+        )
 
-        Text("Horarios guardados:", style = MaterialTheme.typography.titleMedium)
         Spacer(modifier = Modifier.height(10.dp))
 
         LazyColumn {
             items(vm.horarios) { item ->
-
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -104,7 +111,12 @@ fun HorariosScreen(navController: NavController, vm: AppViewModel) {
 
                     Switch(
                         checked = item.activo,
-                        onCheckedChange = { vm.cambiarEstadoHorario(item.id, it) }
+                        onCheckedChange = { nuevoEstado ->
+                            vm.cambiarEstadoHorario(
+                                id = item.id,
+                                activo = nuevoEstado
+                            )
+                        }
                     )
                 }
             }
