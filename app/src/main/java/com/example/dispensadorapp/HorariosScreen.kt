@@ -42,18 +42,14 @@ fun HorariosScreen(navController: NavController, vm: AppViewModel) {
                     navController.context,
                     { _, newHour, newMinute ->
 
-                        val amPm = if (newHour >= 12) "PM" else "AM"
-                        val hour12 =
-                            if (newHour == 0) 12
-                            else if (newHour > 12) newHour - 12
-                            else newHour
-
+                        // ✅ FORMATO 24 HORAS (HH:mm)
                         horaSeleccionada =
-                            String.format("%02d:%02d %s", hour12, newMinute, amPm)
+                            String.format("%02d:%02d", newHour, newMinute)
+
                     },
                     hora,
                     minuto,
-                    false
+                    true // 👈 true = selector en formato 24h
                 ).show()
             }
         ) {

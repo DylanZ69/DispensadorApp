@@ -73,6 +73,15 @@ fun MonitoreoScreen(navController: NavController, vm: AppViewModel) {
             text = "Última dispensación",
             style = MaterialTheme.typography.titleMedium
         )
+        if (vm.alertaNivelBajo) {
+            Spacer(modifier = Modifier.height(12.dp))
+            Text(
+                text = "⚠️ Nivel bajo de alimento",
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodyLarge
+            )
+        }
+
 
         Text(
             text = vm.ultimaDispensacion,

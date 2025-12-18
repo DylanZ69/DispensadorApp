@@ -30,7 +30,12 @@ class AppViewModel : ViewModel() {
     var gramosConfigurados by mutableStateOf(0)
         private set
 
-    private var ultimaHoraGuardada: String? = null
+    // 🔔 ALERTA DE NIVEL BAJO
+    var alertaNivelBajo by mutableStateOf(false)
+        private set
+
+    // 🔐 evitar duplicados en historial
+    private var ultimoEventoId: String? = null
 
     /* ===================== INIT ===================== */
     init {
@@ -38,46 +43,28 @@ class AppViewModel : ViewModel() {
         escucharModo()
         escucharHorarios()
         escucharGramos()
-        escucharMonitoreo()   // 🔥 ESTE ES EL CLAVE PARA EL HISTORIAL
+        escucharMonitoreo()
     }
 
     /* ===================== INIT SEGURO ===================== */
     private fun inicializarFirebase() {
 
-        rtdb.child("config").child("modoAutomatico")
-            .get().addOnSuccessListener {
-                if (!it.exists()) {
-                    rtdb.child("config").child("modoAutomatico").setValue(false)
-                }
-            }
+        rtdb.child("config/modoAutomatico").get().addOnSuccessListener {
+            if (!it.exists()) rtdb.child("config/modoAutomatico").setValue(false)
+        }
 
-        rtdb.child("dispensacion").child("gramos")
-            .get().addOnSuccessListener {
-                if (!it.exists()) {
-                    rtdb.child("dispensacion").child("gramos").setValue(20)
-                }
-            }
+        rtdb.child("dispensacion/gramos").get().addOnSuccessListener {
+            if (!it.exists()) rtdb.child("dispensacion/gramos").setValue(20)
+        }
 
-        rtdb.child("dispensacion").child("activar")
-            .get().addOnSuccessListener {
-                if (!it.exists()) {
-                    rtdb.child("dispensacion").child("activar").setValue(false)
-                }
-            }
-
-        rtdb.child("monitoreo").child("ultimaDispensacion")
-            .get().addOnSuccessListener {
-                if (!it.exists()) {
-                    rtdb.child("monitoreo")
-                        .child("ultimaDispensacion")
-                        .setValue("--")
-                }
-            }
+        rtdb.child("dispensacion/activar").get().addOnSuccessListener {
+            if (!it.exists()) rtdb.child("dispensacion/activar").setValue(false)
+        }
     }
 
     /* ===================== MODO ===================== */
     private fun escucharModo() {
-        rtdb.child("config").child("modoAutomatico")
+        rtdb.child("config/modoAutomatico")
             .addValueEventListener(object : ValueEventListener {
                 override fun onDataChange(snapshot: DataSnapshot) {
                     automatico = snapshot.getValue(Boolean::class.java) ?: false
@@ -87,7 +74,7 @@ class AppViewModel : ViewModel() {
     }
 
     fun cambiarModo(value: Boolean) {
-        rtdb.child("config").child("modoAutomatico").setValue(value)
+        rtdb.child("config/modoAutomatico").setValue(value)
     }
 
     /* ===================== HORARIOS ===================== */
@@ -95,97 +82,97 @@ class AppViewModel : ViewModel() {
         rtdb.child("horarios")
             .addValueEventListener(object : ValueEventListener {
                 override fun onDataChange(snapshot: DataSnapshot) {
-                    val lista = snapshot.children.mapNotNull { child ->
+                    horarios = snapshot.children.mapNotNull { child ->
                         val hora = child.child("hora").getValue(String::class.java)
                         val activo = child.child("activo")
                             .getValue(Boolean::class.java) ?: true
 
-                        if (hora != null) {
+                        hora?.let {
                             HorarioItem(
                                 id = child.key ?: "",
-                                hora = hora,
+                                hora = it,
                                 activo = activo
                             )
-                        } else null
+                        }
                     }
-                    horarios = lista
                 }
-
                 override fun onCancelled(error: DatabaseError) {}
             })
     }
 
     fun agregarHorario(hora: String, callback: (Boolean) -> Unit) {
-        if (hora.isBlank()) {
-            callback(false)
-            return
-        }
+        if (hora.isBlank()) return callback(false)
 
         val key = hora.replace(":", "_").replace(" ", "_")
+        val data = mapOf("hora" to hora, "activo" to true)
 
-        val data = mapOf(
-            "hora" to hora,
-            "activo" to true
-        )
-
-        rtdb.child("horarios")
-            .child(key)
+        rtdb.child("horarios/$key")
             .setValue(data)
             .addOnSuccessListener { callback(true) }
             .addOnFailureListener { callback(false) }
     }
 
     fun cambiarEstadoHorario(id: String, activo: Boolean) {
-        rtdb.child("horarios")
-            .child(id)
-            .child("activo")
-            .setValue(activo)
+        rtdb.child("horarios/$id/activo").setValue(activo)
     }
 
     /* ===================== MANUAL ===================== */
     fun dispensarManual(gramos: Int) {
-        rtdb.child("dispensacion").child("gramos").setValue(gramos)
-        rtdb.child("dispensacion").child("activar").setValue(true)
+        rtdb.child("dispensacion/gramos").setValue(gramos)
+        rtdb.child("dispensacion/activar").setValue(true)
     }
 
     /* ===================== GRAMOS ===================== */
     private fun escucharGramos() {
-        rtdb.child("dispensacion").child("gramos")
+        rtdb.child("dispensacion/gramos")
             .addValueEventListener(object : ValueEventListener {
                 override fun onDataChange(snapshot: DataSnapshot) {
-                    gramosConfigurados =
-                        snapshot.getValue(Int::class.java) ?: 0
+                    gramosConfigurados = snapshot.getValue(Int::class.java) ?: 0
                 }
                 override fun onCancelled(error: DatabaseError) {}
             })
     }
 
-    /* ===================== MONITOREO + HISTORIAL ===================== */
+    /* ===================== MONITOREO + HISTORIAL + ALERTA ===================== */
     private fun escucharMonitoreo() {
         rtdb.child("monitoreo")
             .addValueEventListener(object : ValueEventListener {
+
                 override fun onDataChange(snapshot: DataSnapshot) {
 
                     val hora = snapshot.child("ultimaDispensacion")
                         .getValue(String::class.java) ?: return
 
-                    if (hora == ultimaHoraGuardada) return
-                    ultimaHoraGuardada = hora
-
-                    ultimaDispensacion = hora
-
-                    val gramos = snapshot.child("gramos")
-                        .getValue(Int::class.java) ?: 0
+                    val gramosDisp = snapshot.child("gramosDispensados")
+                        .getValue(Int::class.java) ?: return
 
                     val tipo = snapshot.child("tipo")
                         .getValue(String::class.java) ?: "manual"
 
-                    // 🔵 HISTORIAL OFICIAL (Firestore)
+                    val nivel = snapshot.child("nivelEstimado")
+                        .getValue(Int::class.java) ?: return
+
+                    // 🔐 evitar duplicados en historial
+                    val eventoId = "$hora-$tipo"
+                    if (eventoId == ultimoEventoId) return
+                    ultimoEventoId = eventoId
+
+                    ultimaDispensacion = hora
+
+                    // 🔔 leer nivel mínimo de alerta
+                    rtdb.child("alertas/nivelMinimo")
+                        .get()
+                        .addOnSuccessListener { snap ->
+                            val minimo = snap.getValue(Int::class.java) ?: 0
+                            alertaNivelBajo = nivel <= minimo
+                        }
+
+                    // guardar historial
                     firestore.collection("dispensaciones")
                         .add(
                             mapOf(
                                 "hora" to hora,
-                                "gramos" to gramos,
+                                "gramos" to gramosDisp,
                                 "tipo" to tipo,
                                 "timestamp" to System.currentTimeMillis()
                             )
